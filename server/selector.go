@@ -18,6 +18,10 @@ type serverSelector struct {
 	users   []*url.Userinfo
 }
 
+func (selector *serverSelector) IsAuthenticationToRead() bool {
+	return false
+}
+
 func NewServerSelector(users []*url.Userinfo, methods ...uint8) gosocks5.Selector {
 	return &serverSelector{
 		methods: methods,

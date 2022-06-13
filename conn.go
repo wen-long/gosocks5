@@ -3,6 +3,7 @@ package gosocks5
 import (
 	"io"
 	//"log"
+
 	"net"
 	"sync"
 	"time"
@@ -15,16 +16,19 @@ type Selector interface {
 	Select(methods ...uint8) (method uint8)
 	// on method selected
 	OnSelected(method uint8, conn net.Conn) (net.Conn, error)
+	IsAuthenticationToRead() bool
+	SetAuthenticationRead()
 }
 
 type Conn struct {
-	c              net.Conn
-	selector       Selector
-	method         uint8
-	isClient       bool
-	handshaked     bool
-	handshakeMutex sync.Mutex
-	handshakeErr   error
+	c                  net.Conn
+	selector           Selector
+	method             uint8
+	isClient           bool
+	handshaked         bool
+	handshakeMutex     sync.Mutex
+	handshakeErr       error
+	ShouldWaitAddrResp bool
 }
 
 func ClientConn(conn net.Conn, selector Selector) *Conn {
@@ -42,12 +46,28 @@ func ServerConn(conn net.Conn, selector Selector) *Conn {
 	}
 }
 
-func (conn *Conn) Handleshake() error {
+func (conn *Conn) Handleshake(read bool) error {
 	conn.handshakeMutex.Lock()
 	defer conn.handshakeMutex.Unlock()
 
 	if err := conn.handshakeErr; err != nil {
 		return err
+	}
+
+	if read && conn.selector.IsAuthenticationToRead() {
+		if err := conn.clientReadHandshake(); err != nil {
+			conn.selector.SetAuthenticationRead()
+			return err
+		}
+		conn.selector.SetAuthenticationRead()
+	}
+
+	if read && conn.ShouldWaitAddrResp {
+		_, err := ReadReply(conn.c)
+		if err != nil {
+			return err
+		}
+		conn.ShouldWaitAddrResp = false
 	}
 	if conn.handshaked {
 		return nil
@@ -83,6 +103,21 @@ func (conn *Conn) clientHandshake() error {
 		return err
 	}
 
+	if conn.selector != nil {
+		c, err := conn.selector.OnSelected(0, conn.c)
+		if err != nil {
+			return err
+		}
+		conn.c = c
+	}
+	//conn.method = b[1]
+	//log.Println("method:", conn.method)
+	conn.handshaked = true
+	return nil
+}
+
+func (conn *Conn) clientReadHandshake() error {
+	b := make([]byte, 2)
 	if _, err := io.ReadFull(conn.c, b[:2]); err != nil {
 		return err
 	}
@@ -90,17 +125,15 @@ func (conn *Conn) clientHandshake() error {
 	if b[0] != Ver5 {
 		return ErrBadVersion
 	}
-
-	if conn.selector != nil {
-		c, err := conn.selector.OnSelected(b[1], conn.c)
+	if conn.selector.IsAuthenticationToRead() {
+		resp, err := ReadUserPassResponse(conn.c)
 		if err != nil {
 			return err
 		}
-		conn.c = c
+		if resp.Status != Succeeded {
+			return ErrAuthFailure
+		}
 	}
-	conn.method = b[1]
-	//log.Println("method:", conn.method)
-	conn.handshaked = true
 	return nil
 }
 
@@ -133,14 +166,14 @@ func (conn *Conn) serverHandshake() error {
 }
 
 func (conn *Conn) Read(b []byte) (n int, err error) {
-	if err = conn.Handleshake(); err != nil {
+	if err = conn.Handleshake(true); err != nil {
 		return
 	}
 	return conn.c.Read(b)
 }
 
 func (conn *Conn) Write(b []byte) (n int, err error) {
-	if err = conn.Handleshake(); err != nil {
+	if err = conn.Handleshake(false); err != nil {
 		return
 	}
 	return conn.c.Write(b)

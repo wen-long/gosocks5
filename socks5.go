@@ -96,7 +96,7 @@ func ReadMethods(r io.Reader) ([]uint8, error) {
 	b := sPool.Get().([]byte)
 	defer sPool.Put(b)
 
-	n, err := io.ReadAtLeast(r, b, 2)
+	n, err := io.ReadFull(r, b[:2])
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func ReadUserPassRequest(r io.Reader) (*UserPassRequest, error) {
 	b := sPool.Get().([]byte)
 	defer sPool.Put(b)
 
-	n, err := io.ReadAtLeast(r, b, 2)
+	n, err := io.ReadFull(r, b[:2])
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +444,7 @@ func ReadRequest(r io.Reader) (*Request, error) {
 	b := sPool.Get().([]byte)
 	defer sPool.Put(b)
 
-	n, err := io.ReadAtLeast(r, b, 5)
+	n, err := io.ReadFull(r, b[:5])
 	if err != nil {
 		return nil, err
 	}
@@ -539,7 +539,7 @@ func ReadReply(r io.Reader) (*Reply, error) {
 	b := sPool.Get().([]byte)
 	defer sPool.Put(b)
 
-	n, err := io.ReadAtLeast(r, b, 5)
+	n, err := io.ReadFull(r, b[:5])
 	if err != nil {
 		return nil, err
 	}

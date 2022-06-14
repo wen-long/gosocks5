@@ -25,7 +25,7 @@ func Dial(addr string, options ...DialOption) (net.Conn, error) {
 	}
 
 	cc := gosocks5.ClientConn(conn, selector)
-	if err := cc.Handleshake(); err != nil {
+	if err := cc.Handleshake(false); err != nil {
 		conn.Close()
 		return nil, err
 	}

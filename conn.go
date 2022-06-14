@@ -21,15 +21,16 @@ type Selector interface {
 }
 
 type Conn struct {
-	c                  net.Conn
-	selector           Selector
-	method             uint8
-	isClient           bool
-	handshaked         bool
-	handshakeMutex     sync.Mutex
-	handshakeErr       error
-	ShouldWaitAddrResp bool
-	readMutex          sync.Mutex
+	c                      net.Conn
+	selector               Selector
+	method                 uint8
+	isClient               bool
+	handshaked             bool
+	handshakeMutex         sync.Mutex
+	handshakeErr           error
+	ShouldWaitSocks5METHOD bool
+	ShouldWaitAddrResp     bool
+	readMutex              sync.Mutex
 }
 
 func ClientConn(conn net.Conn, selector Selector) *Conn {
@@ -60,12 +61,13 @@ func (conn *Conn) Handleshake(read bool) error {
 		return err
 	}
 
-	if read && conn.selector.IsAuthenticationToRead() {
+	if read && conn.ShouldWaitSocks5METHOD {
 		if err := conn.clientReadHandshake(); err != nil {
 			conn.selector.SetAuthenticationRead()
 			return err
 		}
 		conn.selector.SetAuthenticationRead()
+		conn.ShouldWaitSocks5METHOD = false
 	}
 
 	if read && conn.ShouldWaitAddrResp {
@@ -108,6 +110,8 @@ func (conn *Conn) clientHandshake() error {
 	if _, err := conn.c.Write(b); err != nil {
 		return err
 	}
+
+	conn.ShouldWaitSocks5METHOD = true
 
 	if conn.selector != nil {
 		c, err := conn.selector.OnSelected(0, conn.c)

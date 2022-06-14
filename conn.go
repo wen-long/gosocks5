@@ -29,6 +29,7 @@ type Conn struct {
 	handshakeMutex     sync.Mutex
 	handshakeErr       error
 	ShouldWaitAddrResp bool
+	readMutex          sync.Mutex
 }
 
 func ClientConn(conn net.Conn, selector Selector) *Conn {
@@ -47,8 +48,13 @@ func ServerConn(conn net.Conn, selector Selector) *Conn {
 }
 
 func (conn *Conn) Handleshake(read bool) error {
-	conn.handshakeMutex.Lock()
-	defer conn.handshakeMutex.Unlock()
+	if read {
+		conn.readMutex.Lock()
+		defer conn.readMutex.Unlock()
+	} else {
+		conn.handshakeMutex.Lock()
+		defer conn.handshakeMutex.Unlock()
+	}
 
 	if err := conn.handshakeErr; err != nil {
 		return err
